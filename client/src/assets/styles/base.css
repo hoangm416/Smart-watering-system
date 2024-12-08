@@ -1,0 +1,55 @@
+@font-face {
+  font-family: "Google Sans";
+  src: url("@assets/fonts/GoogleSans-Light.otf") format("opentype");
+  font-weight: 300;
+}
+
+@font-face {
+  font-family: "Google Sans";
+  src: url("@assets/fonts/GoogleSans-Regular.otf") format("opentype");
+  font-weight: 400;
+}
+
+@font-face {
+  font-family: "Google Sans";
+  src: url("@assets/fonts/GoogleSans-Medium.otf") format("opentype");
+  font-weight: 500;
+}
+
+@font-face {
+  font-family: "Google Sans";
+  src: url("@assets/fonts/GoogleSans-Bold.otf") format("opentype");
+  font-weight: 700;
+}
+
+@font-face {
+  font-family: "Google Sans";
+  src: url("@assets/fonts/GoogleSans-Black.otf") format("opentype");
+  font-weight: 900;
+}
+
+/* Material Symbols */
+@font-face {
+  font-family: "Material Symbols Rounded";
+  font-style: normal;
+  src: url(@assets/icons/MaterialSymbolsRounded.woff2) format("woff2");
+}
+
+.material-symbols-rounded {
+  font-family: "Material Symbols Rounded";
+  font-weight: normal;
+  font-style: normal;
+  font-size: 24px;
+  color: #212121;
+  display: inline-block;
+  line-height: 1;
+  text-transform: none;
+  letter-spacing: normal;
+  word-wrap: normal;
+  white-space: nowrap;
+  direction: ltr;
+}
+
+:root {
+  /* Variables */
+}
