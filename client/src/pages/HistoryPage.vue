@@ -17,7 +17,7 @@
 </template>
 
 <script>
-import axios from "axios";
+// import axios from "axios";
 import {
   Chart as ChartJS,
   Title,
@@ -27,6 +27,8 @@ import {
   CategoryScale,
   LinearScale,
 } from "chart.js";
+import Papa from "papaparse";
+// import file from "/data.csv"; // Cập nhật đường dẫn nếu cần
 
 ChartJS.register(Title, Tooltip, Legend, BarElement, CategoryScale, LinearScale);
 
@@ -41,12 +43,24 @@ export default {
   },
   methods: {
     async getHistory() {
+      const file = "/data.csv" // Cập nhật đường dẫn nếu cần
       try {
-        const response = await axios.get("http://localhost:8080/api/moisture");
-        this.moisture = response.data;
-        this.filterData();
+        const response = await fetch(file);
+        const csvData = await response.text();
+        Papa.parse(csvData, {
+          header: true,
+          skipEmptyLines: true,
+          complete: (results) => {
+            this.moisture = results.data.map((item) => ({
+              device: item.device,
+              createdAt: item.createdAt,
+              moisture: parseInt(item.moisture, 10),
+            }));
+            this.filterData();
+          },
+        });
       } catch (error) {
-        console.log(error);
+        console.error("Lỗi khi tải dữ liệu:", error);
       }
     },
 
@@ -57,14 +71,19 @@ export default {
       });
 
       const labels = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, "0")}h`);
-      const data = Array(24).fill(0);
+      const device1Data = Array(24).fill(0);
+      const device2Data = Array(24).fill(0);
 
       filteredData.forEach((item) => {
         const hour = new Date(item.createdAt).getHours();
-        data[hour] = item.moisture;
+        if (item.device === "Device 1") {
+          device1Data[hour] = item.moisture;
+        } else if (item.device === "Device 2") {
+          device2Data[hour] = item.moisture;
+        }
       });
 
-      this.updateChart(labels, data);
+      this.updateChart(labels, device1Data, device2Data);
     },
 
     formatDate(date) {
@@ -77,21 +96,30 @@ export default {
       return `${String(d.getDate()).padStart(2, "0")}-${String(d.getMonth() + 1).padStart(2, "0")}-${d.getFullYear()}`;
     },
 
-    updateChart(labels, data) {
+    updateChart(labels, device1Data, device2Data) {
       if (this.chartInstance) {
         this.chartInstance.destroy();
       }
 
       const ctx = document.getElementById("moistureChart").getContext("2d");
       this.chartInstance = new ChartJS(ctx, {
-        type: "bar",
+        type: "line",
         data: {
           labels: labels,
           datasets: [
             {
-              label: "Độ ẩm (%)",
-              data: data,
-              backgroundColor: "#42a5f5",
+              label: "Device 1",
+              data: device1Data,
+              borderColor: "orange",
+              backgroundColor: "rgba(255,165,0,0.2)",
+              fill: true,
+            },
+            {
+              label: "Device 2",
+              data: device2Data,
+              borderColor: "blue",
+              backgroundColor: "rgba(0,0,255,0.2)",
+              fill: true,
             },
           ],
         },
@@ -106,6 +134,7 @@ export default {
         },
       });
     },
+
   },
   async created() {
     await this.getHistory();

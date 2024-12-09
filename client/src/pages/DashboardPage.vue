@@ -64,9 +64,10 @@
                 <td>{{ device.name }}</td>
                 <td>{{ device.location }}</td>
                 <td>{{ device.status === '100' ? 'Hoạt động' : 'Không hoạt động' }}</td>
-                <td>{{ device.moisture || '--' }}%</td>
+                <td>{{ device.moisture || '0' }}%</td>
                 <td>
                   <button @click.stop="editDevice(index)" class="button-edit">Sửa</button>
+                  &nbsp;
                   <button @click.stop="deleteDevice(index)" class="button-delete">Xóa</button>
                 </td>
               </tr>
@@ -80,154 +81,163 @@
 
 
 <script>
-  import axios from "axios";
-  import Chart from "chart.js/auto";
-  import io from "socket.io-client";
+// import axios from "axios";
+import Chart from "chart.js/auto";
+import io from "socket.io-client";
 
-  export default {
-    name: "DashboardPage",
+export default {
+  name: "DashboardPage",
 
-    data() {
-      return {
-        devices: [], // Danh sách thiết bị
-        selectedDevice: {},
-        newDevice: {
-          name: "",
-          location: "",
-          status: "100", // Giá trị mặc định là Hoạt động
-          moisture: 0, // Đặt độ ẩm mặc định là 0%
-        },
+  data() {
+    return {
+      devices: [], // Danh sách thiết bị
+      selectedDevice: {},
+      newDevice: {
+        name: "",
+        location: "",
+        status: "100", // Giá trị mặc định là Hoạt động
+        moisture: 0, // Đặt độ ẩm mặc định là 0%
+      },
+      labels: [], // Nhãn biểu đồ
+      moistureData: [], // Dữ liệu độ ẩm
+      chartInstance: null, // Tham chiếu tới biểu đồ
+    };
+  },
+
+  methods: {
+    // Lưu danh sách thiết bị vào LocalStorage
+    saveDevicesToLocalStorage() {
+      localStorage.setItem("devices", JSON.stringify(this.devices));
+    },
+
+    // Tải danh sách thiết bị từ LocalStorage
+    loadDevicesFromLocalStorage() {
+      const savedDevices = localStorage.getItem("devices");
+      if (savedDevices) {
+        this.devices = JSON.parse(savedDevices);
+      }
+    },
+
+    // Thêm thiết bị mới
+    addDevice() {
+      if (this.newDevice.name && this.newDevice.location) {
+        const newDevice = { ...this.newDevice };
+        this.devices.push(newDevice);
+        this.saveDevicesToLocalStorage(); // Cập nhật LocalStorage
+        this.resetNewDeviceForm();
+      } else {
+        alert("Vui lòng nhập đầy đủ thông tin.");
+      }
+    },
+
+    // Reset form thêm thiết bị
+    resetNewDeviceForm() {
+      this.newDevice = {
+        name: "",
+        location: "",
+        status: "100",
+        moisture: 0,
       };
     },
 
-    methods: {
-      // Sự kiện khi nhấn nút tưới nước
-      async onClickButton() {
-        try {
-          const response = await axios.post("http://localhost:8080/api/pump/on");
-          console.log(response.message);
-          alert("Bật máy bơm trong 10 giây.");
-        } catch (error) {
-          console.log(error);
-        }
-      },
+    // Sửa thông tin thiết bị
+    editDevice(index) {
+      const newName = prompt("Nhập tên mới cho thiết bị:", this.devices[index].name);
+      if (newName) {
+        this.devices[index].name = newName;
+        this.saveDevicesToLocalStorage(); // Cập nhật LocalStorage
+      }
+    },
 
-      // Thêm thiết bị mới
-      addDevice() {
-        if (this.newDevice.name && this.newDevice.location) {
-          const newDevice = {
-            ...this.newDevice,
-            // moisture: 0, // Đặt độ ẩm ban đầu là 0
-          };
-          // // Thêm thiết bị vào danh sách thiết bị (giả sử trong thực tế cần gọi API)
-          // console.log("Thiết bị mới:", newDevice);
-          // this.$emit("add-device", newDevice);
-          // Thêm thiết bị mới vào danh sách `devices`
-          this.devices.push(newDevice);
-          this.resetNewDeviceForm();
-        } else {
-          alert("Vui lòng nhập đầy đủ thông tin.");
-        }
-      },
-      resetNewDeviceForm() {
-        this.newDevice = {
-          name: "",
-          location: "",
-          status: "100",
-          moisture: 0
-        };
-      },
+    // Xóa thiết bị
+    deleteDevice(index) {
+      if (confirm("Bạn có chắc chắn muốn xóa thiết bị này?")) {
+        this.devices.splice(index, 1);
+        this.saveDevicesToLocalStorage(); // Cập nhật LocalStorage
+      }
+    },
 
-      // Sửa thông tin thiết bị
-      editDevice(index) {
-        const newName = prompt("Nhập tên mới cho thiết bị:", this.devices[index].name);
-        if (newName) this.devices[index].name = newName;
-      },
+    // Chọn thiết bị hiển thị thông tin
+    selectDevice(device) {
+      this.selectedDevice = { ...device };
+    },
 
-      // Xóa thiết bị
-      deleteDevice(index) {
-        if (confirm("Bạn có chắc chắn muốn xóa thiết bị này?")) {
-          this.devices.splice(index, 1);
-        }
-      },
-
-      // Chọn thiết bị hiển thị thông tin
-      selectDevice(device) {
-        this.selectedDevice = { ...device };
-      },
-
-      // Vẽ biểu đồ độ ẩm
-      renderChart() {
-        const ctx = document.getElementById("myChart");
-        if (this.chartInstance) this.chartInstance.destroy(); // Xóa biểu đồ cũ nếu tồn tại
-        this.chartInstance = new Chart(ctx, {
-          type: "line",
-          data: {
-            labels: this.labels,
-            datasets: [
-              {
-                label: "Độ ẩm đất (%)",
-                data: this.moistureData,
-                borderWidth: 1,
-              },
-            ],
-          },
-          options: {
-            scales: {
-              y: {
-                beginAtZero: true,
-                ticks: {
-                  stepSize: 10,
-                },
+    // Vẽ biểu đồ độ ẩm
+    renderChart() {
+      const ctx = document.getElementById("myChart");
+      if (this.chartInstance) this.chartInstance.destroy(); // Xóa biểu đồ cũ nếu tồn tại
+      this.chartInstance = new Chart(ctx, {
+        type: "line",
+        data: {
+          labels: this.labels,
+          datasets: [
+            {
+              label: "Độ ẩm đất (%)",
+              data: this.moistureData,
+              borderWidth: 1,
+              borderColor: "#007bff",
+              fill: false,
+            },
+          ],
+        },
+        options: {
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: {
+                stepSize: 10,
               },
             },
           },
-        });
-      },
-
-      // Tưới nước
-      waterPlant() {
-        alert("Đã thực hiện tưới nước!");
-      },
-    },
-
-    async mounted() {
-      const socket = io("http://localhost:8080", {
-        extraHeaders: {
-          "Access-Control-Allow-Origin": "*",
         },
       });
-
-      socket.on("connect", () => {
-        console.log("Đã kết nối tới máy chủ Socket.IO");
-      });
-
-      socket.on("data", (data) => {
-        console.log("Nhận được dữ liệu từ máy chủ:", data);
-        this.currentDevice = data.deviceId;
-        this.moisture = data.moisture;
-
-        // Cập nhật thông tin cho biểu đồ
-        this.labels.push(new Date().toLocaleTimeString());
-        this.moistureData.push(data.moisture);
-
-        if (this.labels.length > 10) {
-          this.labels.shift(); // Xóa nhãn cũ
-          this.moistureData.shift(); // Xóa dữ liệu cũ
-        }
-
-        this.renderChart(); // Vẽ lại biểu đồ
-      });
-
-      socket.on("disconnect", () => {
-        console.log("Mất kết nối tới máy chủ Socket.IO");
-      });
-
-      this.renderChart(); // Khởi tạo biểu đồ khi trang được tải
     },
-  };
-</script>
 
+    // Tưới nước
+    waterPlant() {
+      alert("Đã thực hiện tưới nước!");
+    },
+  },
+
+  async mounted() {
+    // Tải thiết bị từ LocalStorage khi khởi động
+    this.loadDevicesFromLocalStorage();
+
+    const socket = io("http://localhost:8080", {
+      extraHeaders: {
+        "Access-Control-Allow-Origin": "*",
+      },
+    });
+
+    socket.on("connect", () => {
+      console.log("Đã kết nối tới máy chủ Socket.IO");
+    });
+
+    socket.on("data", (data) => {
+      console.log("Nhận được dữ liệu từ máy chủ:", data);
+      this.currentDevice = data.deviceId;
+      this.moisture = data.moisture;
+
+      // Cập nhật thông tin cho biểu đồ
+      this.labels.push(new Date().toLocaleTimeString());
+      this.moistureData.push(data.moisture);
+
+      if (this.labels.length > 10) {
+        this.labels.shift(); // Xóa nhãn cũ
+        this.moistureData.shift(); // Xóa dữ liệu cũ
+      }
+
+      this.renderChart(); // Vẽ lại biểu đồ
+    });
+
+    socket.on("disconnect", () => {
+      console.log("Mất kết nối tới máy chủ Socket.IO");
+    });
+
+    this.renderChart(); // Khởi tạo biểu đồ khi trang được tải
+  },
+};
+</script>
 
 <style scoped>
 @import url("@assets/styles/table.css");
