@@ -7,10 +7,10 @@ const bodyParser = require('body-parser'); // Thêm body-parser
 // Khởi tạo Express app và MQTT client
 const app = express();
 app.use(bodyParser.json()); 
-const mqttClient = mqtt.connect('mqtt://localhost');
+const mqttClient = mqtt.connect('mqtt://broker.hivemq.com');
 
 // Kết nối đến MongoDB
-mongoose.connect('mongodb://localhost:27017/pump_water', { useNewUrlParser: true, useUnifiedTopology: true });
+mongoose.connect("mongodb+srv://hoangasphalt89:Hgmo03770@cluster0.4aur1.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0");
 const db = mongoose.connection;
 
 // Định nghĩa Schema cho dữ liệu

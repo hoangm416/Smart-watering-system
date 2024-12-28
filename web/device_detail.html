@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chi tiết thiết bị - Web tưới tiêu</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <style>
+        body, html {
+            color: #333; /* Set default text color for better readability */
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            background-color: #d6c2c2; /* Light background for a clean feel */
+        }
+        .content {
+            flex: 1;
+            width: 100%;
+            max-width: 1200px;
+            margin: 30px auto;
+        }
+        .data-container {
+            margin-bottom: 30px;
+            padding: 20px;
+            background-color: #ffffff;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            border-radius: 10px;
+        }
+        .data-container h3 {
+            font-weight: bold;
+            color: #333;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .status-on {
+            color: green;
+            font-weight: bold;
+        }
+        .status-off {
+            color: red;
+            font-weight: bold;
+        }
+        .form-group label {
+            font-weight: bold;
+            color: #555;
+        }
+        table {
+            margin-top: 20px;
+        }
+        table th, table td {
+            text-align: center;
+            vertical-align: middle;
+        }
+        footer {
+            background-color: #343a40;
+            padding: 16px;
+            text-align: center;
+            color: white;
+            margin-top: auto;
+        }
+        footer a {
+            color: #007bff;
+            margin: 0 10px;
+            font-size: 24px;
+            text-decoration: none;
+        }
+        footer a:hover {
+            text-decoration: underline;
+        }
+        .pagination .page-link {
+            color: #007bff;
+        }
+        .pagination .page-item.active .page-link {
+            background-color: #007bff;
+            border-color: #007bff;
+            color: white;
+        }
+        button.btn-primary {
+            background-color: #007bff;
+            border-color: #007bff;
+        }
+        button.btn-primary:hover {
+            background-color: #0056b3;
+            border-color: #004085;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="#">Web tưới tiêu - IoT và Ứng dụng</a>
+            <a class="nav-link text-white" href="homepage.html">Trang chủ</a>
+        </div>
+    </nav>
+
+    <!-- Main Content Container -->
+    <div class="content">
+        <!-- Điều chỉnh độ ẩm -->
+        <div class="data-container">
+            <h3>Điều chỉnh độ ẩm</h3>
+            <div class="text-center mb-4">
+                <p id="humidity">&#8451;</p>
+                <p id="status"></p>
+            </div>
+            <form id="moisture-form" class="text-center">
+                <div class="form-group">
+                    <label for="moisture-level">Chọn mức độ ẩm mong muốn (%):</label>
+                    <input type="range" class="form-control-range" id="moisture-level" min="0" max="100" step="1" value="50" oninput="updateMoistureLabel(this.value)">
+                    <p>Mức độ ẩm hiện tại: <span id="moisture-value">50</span>%</p>
+                </div>
+                <button type="button" class="btn btn-primary" onclick="setHumidity()">Cập nhật độ ẩm</button>
+            </form>
+        </div>
+
+        <!-- Lịch sử tưới cây -->
+        <div class="data-container">
+            <h3>Lịch sử độ ẩm</h3>
+            <!-- Khung chọn ngày -->
+            <div class="date-picker-container" style="text-align: center; margin-bottom: 20px;">
+                <label for="date-picker">Chọn ngày:</label>
+                <input type="date" id="date-picker" />
+            </div>
+            <!-- Biểu đồ -->
+            <canvas id="humidity-chart" width="400" height="200"></canvas>
+        </div>
+    </div>
+
+    <script type="module" src="https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js"></script>
+    <script type="module" src="https://www.gstatic.com/firebasejs/11.0.2/firebase-database.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
+        import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-analytics.js";
+        import { getDatabase, get, ref, onValue, push, set, query, limitToLast, orderByChild } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-database.js";
+        import { saveHumidityHistory } from './index.js';
+
+        const firebaseConfig = { 
+            apiKey : "AIzaSyDm9JTh2asPyvghYfTThNuYe2vESgvRTfw" , 
+            authDomain : "iot-watering-caf9b.firebaseapp.com" , 
+            databaseURL : "https://iot-watering-caf9b-default-rtdb.asia-southeast1.firebasedatabase.app" , 
+            projectId : "iot-watering-caf9b" , 
+            storageBucket : "iot-watering-caf9b.firebasestorage.app" , 
+            messagingSenderId : "255169422238" , 
+            appId : "1:255169422238:web:5368795df5ee2c3009ec8f" , 
+            measurementId : "G-TQYZKNEL5B" 
+        };
+    
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const analytics = getAnalytics(app);
+        const database = getDatabase(app);
+    
+        // Lấy deviceId từ URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const deviceId = urlParams.get('device');
+    
+        if (!deviceId) {
+            alert("Thiếu thông tin thiết bị! Vui lòng cung cấp deviceId trong URL.");
+            throw new Error("Thiếu deviceId");
+        }
+    
+        const devicePath = `Plant_Watering/Devices/${deviceId}`;
+        const dataRef1 = ref(database, `${devicePath}/Humidity`);
+        const dataRef2 = ref(database, `${devicePath}/setHumidity`);
+        const statusRef = ref(database, `${devicePath}/Status`);
+        const historyRef = ref(database, `${devicePath}/History`);
+    
+        let currentHumidity = 0;
+        let desiredHumidity = 80;
+    
+        // Fetch device details
+        const deviceRef = ref(database, devicePath);
+        get(deviceRef).then((snapshot) => {
+            if (snapshot.exists()) {
+                const deviceData = snapshot.val();
+                document.querySelector('h3').innerText = `Điều chỉnh độ ẩm - Thiết bị ${deviceData.name}`;
+            } else {
+                console.error('No device data found');
+            }
+        }).catch((error) => {
+            console.error('Error fetching device data:', error);
+        });
+    
+        // Fetch the current humidity
+        onValue(dataRef1, (snapshot) => {
+            currentHumidity = snapshot.val() || 0; // Đảm bảo giá trị không null
+            document.getElementById('humidity').innerHTML = "Độ ẩm: " + currentHumidity + "%";
+            updateStatus();
+        });
+    
+        // Fetch the desired humidity
+        onValue(dataRef2, (snapshot) => {
+            desiredHumidity = Number(snapshot.val()); // Ensure desiredHumidity is a number
+            document.getElementById('moisture-value').innerHTML = desiredHumidity;
+            updateStatus();
+        });
+    
+        // Fetch the status
+        onValue(statusRef, (snapshot) => {
+            const status = snapshot.val();
+            const statusElement = document.getElementById('status');
+            if (status) {
+                statusElement.innerHTML = "Trạng thái: Bật";
+                statusElement.className = "status-on";
+            } else {
+                statusElement.innerHTML = "Trạng thái: Tắt";
+                statusElement.className = "status-off";
+            }
+        });
+    
+        // Cập nhật ngưỡng độ ẩm
+        window.setHumidity = function() {
+        desiredHumidity = Number(document.getElementById('moisture-level').value); // Ensure desiredHumidity is a number
+        const status = currentHumidity < desiredHumidity;
+
+        // Cập nhật setHumidity và Status trong cơ sở dữ liệu
+        const updates = {
+            setHumidity: desiredHumidity,
+            Status: status,
+            Time: Date.now()
+        };
+
+        set(ref(database, devicePath), updates)
+            .then(() => {
+                alert('Cập nhật ngưỡng độ ẩm thành công!');
+                saveHumidityHistory(deviceId, currentHumidity); // Save the current humidity to history
+                updateStatus(); // Ensure status is updated after setting humidity
+            })
+            .catch((error) => {
+                console.error('Đã xảy ra lỗi:', error);
+            });
+        };
+    
+        // Hàm cập nhật trạng thái
+        function updateStatus() {
+            const statusElement = document.getElementById('status');
+            if (currentHumidity < desiredHumidity) {
+                statusElement.innerHTML = "Trạng thái: Bật";
+                statusElement.className = "status-on";
+            } else {
+                statusElement.innerHTML = "Trạng thái: Tắt";
+                statusElement.className = "status-off";
+            }
+        }
+
+        // Hàm cập nhật nhãn mức độ ẩm
+        window.updateMoistureLabel = function(value) {
+            document.getElementById('moisture-value').innerText = value;
+        };
+
+        // Dữ liệu mẫu cho lịch sử độ ẩm
+        const exampleData = {
+            "2024-12-27": [10, 20, 30, 40, 50, 60, 70, 80, 90, 80, 70, 60, 50, 40, 30, 20, 10],
+            "2024-12-26": [15, 25, 35, 45, 55, 65, 75, 85, 95, 85, 75, 65, 55, 45, 35, 25, 15],
+        };
+
+        // Biểu đồ
+        const ctx = document.getElementById('humidity-chart').getContext('2d');
+        let humidityChart;
+
+        // Hàm tạo biểu đồ
+        function createChart(labels, data) {
+            if (humidityChart) {
+                humidityChart.destroy(); // Hủy biểu đồ cũ (nếu có)
+            }
+            humidityChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels, // Trục x (thời gian)
+                    datasets: [{
+                        label: 'Độ ẩm (%)',
+                        data: data, // Giá trị độ ẩm
+                        borderColor: 'blue',
+                        fill: false,
+                        tension: 0.1, // Làm mượt đường
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top',
+                        },
+                    },
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Thời gian (giờ)',
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Độ ẩm (%)',
+                            },
+                            suggestedMin: 0,
+                            suggestedMax: 100,
+                        }
+                    }
+                }
+            });
+        }
+
+        // Hàm cập nhật biểu đồ theo ngày được chọn
+        function updateChart(date) {
+            const data = exampleData[date] || [];
+            const labels = Array.from({ length: 24 }, (_, i) => `${i}:00`); // 24 giờ
+            createChart(labels, data);
+        }
+
+        // Xử lý khi người dùng chọn ngày
+        document.getElementById('date-picker').addEventListener('change', (e) => {
+            const selectedDate = e.target.value;
+            updateChart(selectedDate);
+        });
+
+        // Hiển thị dữ liệu mặc định (ngày hiện tại)
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('date-picker').value = today;
+        updateChart(today);
+
+    </script>
+    
+
+    <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js"></script>
+</body>
+</html>

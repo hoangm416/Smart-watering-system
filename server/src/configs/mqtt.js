@@ -1,6 +1,6 @@
 const mqtt = require("mqtt");
 const humidity = require("../models/humidity");
-const client = mqtt.connect("mqtt://localhost");
+const client = mqtt.connect("mqtt://broker.hivemq.com");
 
 client.on("connect", () => {
     console.log("Connected to MQTT broker!");
@@ -12,18 +12,18 @@ client.on("connect", () => {
     });
 });
 
-// // Publish dữ liệu lên MQTT broker
-// const topic = "test";
-// const message = "Hello, MQTT!";
+// Publish dữ liệu lên MQTT broker
+const topic = "test";
+const message = "Hello, MQTT!";
 
-// client.publish(topic, message, (err) => {
-//     if (err) {
-//         console.error("Publish error:", err);
-//     } else {
-//         console.log("Message published successfully");
-//         client.end(); // Đóng kết nối MQTT sau khi hoàn thành việc publish
-//     }
-// });
+client.publish(topic, message, (err) => {
+    if (err) {
+        console.error("Publish error:", err);
+    } else {
+        console.log("Message published successfully");
+        client.end(); // Đóng kết nối MQTT sau khi hoàn thành việc publish
+    }
+});
 
 // Xử lý sự kiện khi nhận được message từ MQTT broker
 client.on('message', (topic, message) => {
