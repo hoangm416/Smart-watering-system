@@ -98,7 +98,7 @@
     <!-- Main Content Container -->
     <div class="content">
         <!-- Điều chỉnh độ ẩm -->
-        <div class="data-container">
+        <!-- <div class="data-container">
             <h3>Điều chỉnh độ ẩm</h3>
             <div class="text-center mb-4">
                 <p id="humidity">&#8451;</p>
@@ -112,7 +112,7 @@
                 </div>
                 <button type="button" class="btn btn-primary" onclick="setHumidity()">Cập nhật độ ẩm</button>
             </form>
-        </div>
+        </div> -->
 
         <!-- Lịch sử tưới cây -->
         <div class="data-container">
@@ -166,7 +166,7 @@
         const dataRef1 = ref(database, `${devicePath}/Humidity`);
         const dataRef2 = ref(database, `${devicePath}/setHumidity`);
         const statusRef = ref(database, `${devicePath}/Status`);
-        const historyRef = ref(database, `${devicePath}/History`);
+        const historyRef = ref(database, `${devicePath}/history`);
     
         let currentHumidity = 0;
         let desiredHumidity = 80;
@@ -251,31 +251,24 @@
             document.getElementById('moisture-value').innerText = value;
         };
 
-        // Dữ liệu mẫu cho lịch sử độ ẩm
-        const exampleData = {
-            "2024-12-27": [10, 20, 30, 40, 50, 60, 70, 80, 90, 80, 70, 60, 50, 40, 30, 20, 10],
-            "2024-12-26": [15, 25, 35, 45, 55, 65, 75, 85, 95, 85, 75, 65, 55, 45, 35, 25, 15],
-        };
-
         // Biểu đồ
         const ctx = document.getElementById('humidity-chart').getContext('2d');
         let humidityChart;
 
-        // Hàm tạo biểu đồ
         function createChart(labels, data) {
             if (humidityChart) {
-                humidityChart.destroy(); // Hủy biểu đồ cũ (nếu có)
+                humidityChart.destroy();
             }
             humidityChart = new Chart(ctx, {
                 type: 'line',
                 data: {
-                    labels: labels, // Trục x (thời gian)
+                    labels: labels,
                     datasets: [{
                         label: 'Độ ẩm (%)',
-                        data: data, // Giá trị độ ẩm
-                        borderColor: 'blue',
+                        data: data,
+                        borderColor: 'green',
                         fill: false,
-                        tension: 0.1, // Làm mượt đường
+                        tension: 0.1,
                     }]
                 },
                 options: {
@@ -290,7 +283,7 @@
                         x: {
                             title: {
                                 display: true,
-                                text: 'Thời gian (giờ)',
+                                text: 'Thời gian',
                             }
                         },
                         y: {
@@ -306,23 +299,54 @@
             });
         }
 
-        // Hàm cập nhật biểu đồ theo ngày được chọn
-        function updateChart(date) {
-            const data = exampleData[date] || [];
-            const labels = Array.from({ length: 24 }, (_, i) => `${i}:00`); // 24 giờ
-            createChart(labels, data);
+        function updateChartForDate(selectedDate) {
+            onValue(historyRef, (snapshot) => {
+                const historyData = snapshot.val();
+                const labels = [];
+                const data = [];
+
+                for (const key in historyData) {
+                    if (historyData.hasOwnProperty(key)) {
+                        const recordDate = new Date(historyData[key].timestamp);
+                        const recordDateString = recordDate.toISOString().split('T')[0];
+
+                        if (selectedDate === '2024-12-28' && recordDateString <= '2024-12-28') {
+                            labels.push(historyData[key].timestamp);
+                            data.push(historyData[key].humidity);
+                        } else if (recordDateString === selectedDate) {
+                            labels.push(historyData[key].timestamp);
+                            data.push(historyData[key].humidity);
+                        }
+                    }
+                }
+
+                createChart(labels, data);
+            });
         }
 
-        // Xử lý khi người dùng chọn ngày
-        document.getElementById('date-picker').addEventListener('change', (e) => {
-            const selectedDate = e.target.value;
-            updateChart(selectedDate);
+        document.getElementById('date-picker').addEventListener('change', (event) => {
+            const selectedDate = event.target.value;
+            updateChartForDate(selectedDate);
         });
 
-        // Hiển thị dữ liệu mặc định (ngày hiện tại)
-        const today = new Date().toISOString().split('T')[0];
-        document.getElementById('date-picker').value = today;
-        updateChart(today);
+        // Initialize chart with default date
+        updateChartForDate('2024-12-28');
+
+        // Realtime update
+        onValue(historyRef, (snapshot) => {
+        const historyData = snapshot.val();
+        const labels = [];
+        const data = [];
+
+        for (const key in historyData) {
+            if (historyData.hasOwnProperty(key)) {
+                labels.push(historyData[key].timestamp);
+                data.push(historyData[key].humidity);
+            }
+        }
+
+        createChart(labels, data);
+    });
 
     </script>
     

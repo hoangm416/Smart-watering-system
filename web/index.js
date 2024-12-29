@@ -2,7 +2,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebas
 import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-analytics.js";
 import { getAuth, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
 import { getFunctions } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-functions.js";
-import { getDatabase, ref, set, get, push } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-database.js";
+import { getDatabase, ref, set, get, push, onValue } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-database.js";
 
 
 const firebaseConfig = { 
@@ -143,7 +143,7 @@ export function addDevice(deviceKey, deviceName) {
 // Function to save humidity history
 export function saveHumidityHistory(deviceKey, humidity) {
     const database = getDatabase();
-    const historyRef = ref(database, `Plant_Watering/Devices/${deviceKey}/History`);
+    const historyRef = ref(database, `Plant_Watering/Devices/${deviceKey}/historyHumid`);
     const newHistoryRef = push(historyRef);
     set(newHistoryRef, {
         humidity: humidity,
