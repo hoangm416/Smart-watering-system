@@ -87,19 +87,28 @@
         const setHumidityRef = ref(database, `${devicePath}/setHumidity`);
         const statusRef = ref(database, `${devicePath}/Status`);
         const historyRef = ref(database, `${devicePath}/history`);
+        const historyPrevious = ref(database, `${devicePath}/history_previous_day`);
 
-        // Fetch the status
-        onValue(ref(database, 'Plant_Watering/Devices/dev01/Status'), (snapshot) => {
+        // Theo dõi trạng thái của thiết bị
+        onValue(statusRef, (snapshot) => {
             const status = snapshot.val();
             const statusElement = document.getElementById('status');
-            if (status) {
-                statusElement.innerHTML = "Trạng thái máy bơm: Bật";
-                statusElement.className = "status-on";
-            } else {
-                statusElement.innerHTML = "Trạng thái máy bơm: Tắt";
-                statusElement.className = "status-off";
-            }
+            const messageRef = ref(database, `${devicePath}/message`);
+
+            // Lấy thông báo message từ Firebase
+            onValue(messageRef, (messageSnapshot) => {
+                const message = messageSnapshot.val();
+
+                if (status) {
+                    statusElement.innerHTML = `Trạng thái máy bơm: Bật<br>${message}`;
+                    statusElement.className = "status-on";
+                } else {
+                    statusElement.innerHTML = `Trạng thái máy bơm: Tắt<br>${message}`;
+                    statusElement.className = "status-off";
+                }
+            });
         });
+
 
         // Khởi tạo biểu đồ
         let chart = null;
