@@ -44,7 +44,7 @@
                 <input type="date" id="date-picker" />
             </div>
             <!-- Biểu đồ -->
-            <canvas id="humidity-chart" width="400" height="200"></canvas>
+            <canvas id="history-humidity-chart" width="400" height="200"></canvas>
         </div>
     </div>
 
@@ -87,6 +87,7 @@
         const setHumidityRef = ref(database, `${devicePath}/setHumidity`);
         const statusRef = ref(database, `${devicePath}/Status`);
         const historyRef = ref(database, `${devicePath}/history`);
+        const historyPrevRef = ref(database, `${devicePath}/history_previous_day`);
 
         // Fetch the status
         onValue(ref(database, 'Plant_Watering/Devices/dev01/Status'), (snapshot) => {
@@ -105,11 +106,11 @@
         let chart = null;
         const ctx = document.getElementById('realtime-humidity-chart').getContext('2d');
         const WINDOW_SIZE = 3; // Kích thước cửa sổ 
-        
-        const ctx2 = document.getElementById('humidity-chart').getContext('2d');
+
+        const ctx2 = document.getElementById('history-humidity-chart').getContext('2d');
         let humidityChart;
 
-        function createChart(labels, data) {
+        function createHistoryChart(labels, data) {
             if (humidityChart) {
                 humidityChart.destroy();
             }
@@ -154,41 +155,56 @@
         }
 
         function updateChartForDate(selectedDate) {
-            onValue(historyRef, (snapshot) => {
-                const historyData = snapshot.val();
+            onValue(historyPrevRef, (snapshot) => {
+                const historyData = snapshot.val(); // Dữ liệu từ Firebase
                 const labels = [];
                 const data = [];
 
-                for (const key in historyData) {
-                    if (historyData.hasOwnProperty(key)) {
-                        const recordDate = new Date(historyData[key].timestamp);
-                        const recordDateString = recordDate.toISOString().split('T')[0];
+                console.log("historyData", historyData);
 
-                        if (selectedDate === '2024-12-28' && recordDateString <= '2024-12-28') {
-                            labels.push(historyData[key].timestamp);
-                            data.push(historyData[key].humidity);
-                        } else if (recordDateString === selectedDate) {
-                            labels.push(historyData[key].timestamp);
-                            data.push(historyData[key].humidity);
+                // Kiểm tra nếu có dữ liệu cho ngày đã chọn
+                if (historyData.hasOwnProperty(selectedDate)) {
+                    const selectedDateData = historyData[selectedDate];
+
+                    // Lặp qua các thời điểm trong ngày
+                    for (const time in selectedDateData) {
+                        if (selectedDateData.hasOwnProperty(time)) {
+                            const record = selectedDateData[time];
+                            console.log("record", record);
+
+                            // Sử dụng time làm nhãn
+                            labels.push(time);
+                            data.push(record.humidity);   // Thêm độ ẩm làm dữ liệu
                         }
                     }
+                } else {
+                    console.log(`Không tìm thấy dữ liệu cho ngày: ${selectedDate}`);
                 }
 
-                createChart(labels, data);
+                // Kiểm tra dữ liệu đã xử lý
+                console.log("labels", labels);
+                console.log("data", data);
+
+                // Tạo biểu đồ với dữ liệu đã xử lý
+                createHistoryChart(labels, data);
             });
         }
 
+        // Lắng nghe sự kiện thay đổi ngày từ input date-picker
         document.getElementById('date-picker').addEventListener('change', (event) => {
-            const selectedDate = event.target.value;
-            updateChartForDate(selectedDate);
+            const selectedDate = event.target.value; // Lấy ngày đã chọn
+            updateChartForDate(selectedDate);        // Cập nhật biểu đồ với ngày đã chọn
         });
 
+
+
         // Initialize chart with default date
-        updateChartForDate('2024-12-28');
+        // updateChartForDate('2024-12-28');
 
         // Realtime update
-        onValue(historyRef, (snapshot) => {
+        onValue(historyPrevRef, (snapshot) => {
             const historyData = snapshot.val();
+
             const labels = [];
             const data = [];
 
@@ -199,10 +215,10 @@
                 }
             }
 
-            createChart(labels, data);
+            createHistoryChart(labels, data);
         });
-        
-        function initializeChart() {
+
+        function initializeRealtimeChart() {
             chart = new Chart(ctx, {
                 type: 'line',
                 data: {
@@ -520,7 +536,7 @@
 
             // Tìm độ bậc tối ưu cho hồi quy đa thức
             const degree = findOptimalDegree(dataPoints, 1, 15);
-            console.log(`Độ bậc tối ưu cho hồi quy đa thức: ${degree}`);
+            // console.log(`Độ bậc tối ưu cho hồi quy đa thức: ${degree}`);
 
             // Tính toán hồi quy đa thức và đường hồi quy
             const regressionCurve = calculateRegressionCurve(dataPoints, degree);
@@ -563,7 +579,7 @@
 
             // Dự đoán tương lai bằng LSTM
             const predictionsLSTM = await predictWithLSTM(dataPoints, numPredictions);
-            console.log(`Dự đoán LSTM: ${predictionsLSTM}`);
+            // console.log(`Dự đoán LSTM: ${predictionsLSTM}`);
 
             // Cập nhật dữ liệu dự đoán LSTM
             chart.data.datasets[3].data = Array(dataPoints.length).fill(null).concat(predictionsLSTM);
@@ -586,7 +602,7 @@
         });
 
         // Khởi tạo biểu đồ
-        initializeChart();
+        initializeRealtimeChart();
 
         // Hàm cập nhật nhãn cho thanh trượt độ ẩm
         function updateMoistureLabel(value) {
