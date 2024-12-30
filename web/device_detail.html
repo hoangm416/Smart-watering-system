@@ -1,13 +1,26 @@
 <!DOCTYPE html>
 <html lang="vi">
-
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <title>Chi tiết thiết bị - Web tưới tiêu</title>
-    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
-    <link rel="stylesheet" href="style_device_detail.css">
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css"/>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css"/>
+    <!-- CSS tuỳ chọn của bạn -->
+    <style>
+        .status-on {
+            color: green;
+        }
+        .status-off {
+            color: red;
+        }
+        .content {
+            padding: 20px;
+        }
+        .data-container {
+            margin-bottom: 40px;
+        }
+    </style>
 </head>
 
 <body>
@@ -31,39 +44,38 @@
         <!-- Đồ thị theo dõi độ ẩm -->
         <div class="data-container">
             <h3 class="text-center mb-4">Đồ thị độ ẩm thời gian thực</h3>
-            <!-- Biểu đồ -->
             <canvas id="realtime-humidity-chart" width="800" height="400"></canvas>
         </div>
 
-        <!-- Lịch sử tưới cây -->
+        <!-- Lịch sử độ ẩm -->
         <div class="data-container">
             <h3 class="text-center mb-4">Lịch sử độ ẩm</h3>
-            <!-- Khung chọn ngày -->
             <div class="date-picker-container" style="text-align: center; margin-bottom: 20px;">
                 <label for="date-picker">Chọn ngày:</label>
                 <input type="date" id="date-picker" />
             </div>
-            <!-- Biểu đồ -->
             <canvas id="history-humidity-chart" width="400" height="200"></canvas>
         </div>
     </div>
 
-    <!-- Thêm thư viện regression.js và TensorFlow.js -->
+    <!-- Thư viện regression.js và TensorFlow.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/regression/2.0.1/regression.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0/dist/tf.min.js"></script>
 
+    <!-- Firebase (module) -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
         import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-analytics.js";
         import { getDatabase, ref, onValue, set, query, limitToLast } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-database.js";
 
+        // Cấu hình Firebase
         const firebaseConfig = {
-            apiKey: "AIzaSyDm9JTh2asPyvghYfTThNuYe2vESgvRTfw",
+            apiKey: "AIzaSyXXXXXXX",
             authDomain: "iot-watering-caf9b.firebaseapp.com",
             databaseURL: "https://iot-watering-caf9b-default-rtdb.asia-southeast1.firebasedatabase.app",
             projectId: "iot-watering-caf9b",
-            storageBucket: "iot-watering-caf9b.firebasestorage.app",
+            storageBucket: "iot-watering-caf9b.appspot.com",
             messagingSenderId: "255169422238",
             appId: "1:255169422238:web:5368795df5ee2c3009ec8f",
             measurementId: "G-TQYZKNEL5B"
@@ -77,28 +89,25 @@
         // Lấy deviceId từ URL
         const urlParams = new URLSearchParams(window.location.search);
         const deviceId = urlParams.get('device');
-
         if (!deviceId) {
             alert("Thiếu thông tin thiết bị! Vui lòng cung cấp deviceId trong URL.");
             throw new Error("Thiếu deviceId");
         }
 
-        const devicePath = `Plant_Watering/Devices/${deviceId}`;
-        const setHumidityRef = ref(database, `${devicePath}/setHumidity`);
-        const statusRef = ref(database, `${devicePath}/Status`);
-        const historyRef = ref(database, `${devicePath}/history`);
-        const historyPrevRef = ref(database, `${devicePath}/history_previous_day`);
+        // Tham chiếu Firebase
+        const devicePath       = `Plant_Watering/Devices/${deviceId}`;
+        const setHumidityRef   = ref(database, `${devicePath}/setHumidity`);
+        const statusRef        = ref(database, `${devicePath}/Status`);
+        const messageRef       = ref(database, `${devicePath}/message`);
+        const historyRef       = ref(database, `${devicePath}/history`);
+        const historyPrevRef   = ref(database, `${devicePath}/history_previous_day`);
 
-        // Theo dõi trạng thái của thiết bị
+        // --------------------- UI: Theo dõi trạng thái thiết bị ---------------------
         onValue(statusRef, (snapshot) => {
             const status = snapshot.val();
             const statusElement = document.getElementById('status');
-            const messageRef = ref(database, `${devicePath}/message`);
-
-            // Lấy thông báo message từ Firebase
-            onValue(messageRef, (messageSnapshot) => {
-                const message = messageSnapshot.val();
-
+            onValue(messageRef, (msgSnapshot) => {
+                const message = msgSnapshot.val() || "";
                 if (status) {
                     statusElement.innerHTML = `Trạng thái máy bơm: Bật<br>${message}`;
                     statusElement.className = "status-on";
@@ -109,14 +118,9 @@
             });
         });
 
-
-        // Khởi tạo biểu đồ
-        let chart = null;
-        const ctx = document.getElementById('realtime-humidity-chart').getContext('2d');
-        const WINDOW_SIZE = 3; // Kích thước cửa sổ 
-
+        // --------------------- Biểu đồ lịch sử (chọn ngày) ---------------------
+        let humidityChart = null;
         const ctx2 = document.getElementById('history-humidity-chart').getContext('2d');
-        let humidityChart;
 
         function createHistoryChart(labels, data) {
             if (humidityChart) {
@@ -131,7 +135,7 @@
                         data: data,
                         borderColor: 'green',
                         fill: false,
-                        tension: 0.1,
+                        tension: 0.1
                     }]
                 },
                 options: {
@@ -139,23 +143,23 @@
                     plugins: {
                         legend: {
                             display: true,
-                            position: 'top',
-                        },
+                            position: 'top'
+                        }
                     },
                     scales: {
                         x: {
                             title: {
                                 display: true,
-                                text: 'Thời gian',
+                                text: 'Thời gian'
                             }
                         },
                         y: {
                             title: {
                                 display: true,
-                                text: 'Độ ẩm (%)',
+                                text: 'Độ ẩm (%)'
                             },
                             suggestedMin: 0,
-                            suggestedMax: 100,
+                            suggestedMax: 100
                         }
                     }
                 }
@@ -164,77 +168,44 @@
 
         function updateChartForDate(selectedDate) {
             onValue(historyPrevRef, (snapshot) => {
-                const historyData = snapshot.val(); // Dữ liệu từ Firebase
+                const historyData = snapshot.val();
                 const labels = [];
                 const data = [];
 
-                console.log("historyData", historyData);
-
+                if (!historyData) return;
                 // Kiểm tra nếu có dữ liệu cho ngày đã chọn
                 if (historyData.hasOwnProperty(selectedDate)) {
                     const selectedDateData = historyData[selectedDate];
-
-                    // Lặp qua các thời điểm trong ngày
                     for (const time in selectedDateData) {
                         if (selectedDateData.hasOwnProperty(time)) {
-                            const record = selectedDateData[time];
-                            console.log("record", record);
-
-                            // Sử dụng time làm nhãn
                             labels.push(time);
-                            data.push(record.humidity);   // Thêm độ ẩm làm dữ liệu
+                            data.push(selectedDateData[time].humidity);
                         }
                     }
                 } else {
                     console.log(`Không tìm thấy dữ liệu cho ngày: ${selectedDate}`);
                 }
-
-                // Kiểm tra dữ liệu đã xử lý
-                console.log("labels", labels);
-                console.log("data", data);
-
-                // Tạo biểu đồ với dữ liệu đã xử lý
                 createHistoryChart(labels, data);
             });
         }
 
-        // Lắng nghe sự kiện thay đổi ngày từ input date-picker
         document.getElementById('date-picker').addEventListener('change', (event) => {
-            const selectedDate = event.target.value; // Lấy ngày đã chọn
-            updateChartForDate(selectedDate);        // Cập nhật biểu đồ với ngày đã chọn
+            const selectedDate = event.target.value;
+            updateChartForDate(selectedDate);
         });
 
-
-
-        // Initialize chart with default date
-        // updateChartForDate('2024-12-28');
-
-        // Realtime update
-        onValue(historyPrevRef, (snapshot) => {
-            const historyData = snapshot.val();
-
-            const labels = [];
-            const data = [];
-
-            for (const key in historyData) {
-                if (historyData.hasOwnProperty(key)) {
-                    labels.push(historyData[key].timestamp);
-                    data.push(historyData[key].humidity);
-                }
-            }
-
-            createHistoryChart(labels, data);
-        });
-
+        // --------------------- Biểu đồ realtime ---------------------
+        let chart = null;
+        const ctx = document.getElementById('realtime-humidity-chart').getContext('2d');
         function initializeRealtimeChart() {
             chart = new Chart(ctx, {
                 type: 'line',
                 data: {
-                    labels: [], // Thời gian sẽ được thêm sau
+                    labels: [],
                     datasets: [
                         {
                             label: 'Độ ẩm thực tế (%)',
-                            data: [], // Dữ liệu độ ẩm sẽ được thêm sau
+                            data: [],
                             borderColor: 'rgba(75, 192, 192, 1)',
                             backgroundColor: 'rgba(75, 192, 192, 0.2)',
                             borderWidth: 2,
@@ -244,18 +215,8 @@
                             pointBackgroundColor: 'rgba(75, 192, 192, 1)'
                         },
                         {
-                            label: 'Dự đoán độ ẩm bằng Hồi quy Đa thức (%)',
-                            data: [], // Dữ liệu dự đoán sẽ được thêm sau
-                            borderColor: 'rgba(255, 99, 132, 1)',
-                            borderDash: [10, 5],
-                            borderWidth: 2,
-                            tension: 0.4,
-                            fill: false,
-                            pointRadius: 0
-                        },
-                        {
-                            label: 'Đường Hồi Quy Đa Thức',
-                            data: [], // Dữ liệu hồi quy sẽ được thêm sau
+                            label: 'Hồi quy đa thức (fit)',
+                            data: [],
                             borderColor: 'rgba(54, 162, 235, 1)',
                             borderWidth: 2,
                             tension: 0.4,
@@ -264,9 +225,9 @@
                             borderDash: [5, 5]
                         },
                         {
-                            label: 'Dự đoán độ ẩm bằng LSTM (%)',
-                            data: [], // Dữ liệu dự đoán LSTM sẽ được thêm sau
-                            borderColor: 'rgba(255, 206, 86, 1)',
+                            label: 'Dự đoán đa thức (tương lai)',
+                            data: [],
+                            borderColor: 'rgba(255, 99, 132, 1)',
                             borderDash: [10, 5],
                             borderWidth: 2,
                             tension: 0.4,
@@ -274,21 +235,31 @@
                             pointRadius: 0
                         },
                         {
-                            label: 'Đường Hồi Quy LSTM',
-                            data: [], // Dữ liệu hồi quy LSTM sẽ được thêm sau
+                            label: 'Hồi quy LSTM (fit)',
+                            data: [],
                             borderColor: 'rgba(153, 102, 255, 1)',
                             borderWidth: 2,
                             tension: 0.4,
                             fill: false,
                             pointRadius: 0,
                             borderDash: [5, 5]
+                        },
+                        {
+                            label: 'Dự đoán LSTM (tương lai)',
+                            data: [],
+                            borderColor: 'rgba(255, 206, 86, 1)',
+                            borderDash: [10, 5],
+                            borderWidth: 2,
+                            tension: 0.4,
+                            fill: false,
+                            pointRadius: 0
                         }
                     ]
                 },
                 options: {
                     responsive: true,
                     animation: {
-                        duration: 0 // Loại bỏ hiệu ứng để cập nhật nhanh
+                        duration: 0
                     },
                     scales: {
                         x: {
@@ -316,18 +287,13 @@
             });
         }
 
-        // Hàm tính hồi quy đa thức
+        // --------------------- Hàm hồi quy đa thức ---------------------
         function polynomialRegression(data, degree) {
-            // Tạo dữ liệu đầu vào cho regression.js
             const dataForRegression = data.map((y, x) => [x, y]);
-
-            // Thực hiện hồi quy đa thức với độ bậc đã chọn
             const result = regression.polynomial(dataForRegression, { order: degree });
-
             return result;
         }
 
-        // Hàm tính hàm mất mát (Mean Squared Error)
         function calculateMSE(predictions, actuals) {
             let mse = 0;
             for (let i = 0; i < actuals.length; i++) {
@@ -336,267 +302,298 @@
             return mse / actuals.length;
         }
 
-        // Hàm tìm độ bậc tối ưu từ 1 đến 15
-        function findOptimalDegree(data, minDegree = 1, maxDegree = 15) {
+        function findOptimalDegree(data, minDegree = 1, maxDegree = 5) {
             let optimalDegree = minDegree;
             let minMSE = Infinity;
-
             for (let degree = minDegree; degree <= maxDegree; degree++) {
                 const regressionResult = polynomialRegression(data, degree);
                 const { equation } = regressionResult;
 
-                // Tính giá trị hồi quy tại mỗi điểm dữ liệu
                 const predictions = data.map((_, x) => {
                     let y = 0;
-                    equation.forEach((coef, index) => {
-                        y += coef * Math.pow(x, index);
+                    equation.forEach((coef, idx) => {
+                        y += coef * Math.pow(x, idx);
                     });
                     return y;
                 });
-
                 const mse = calculateMSE(predictions, data);
-
-                console.log(`Degree: ${degree}, MSE: ${mse}`);
-
                 if (mse < minMSE) {
                     minMSE = mse;
                     optimalDegree = degree;
                 }
             }
-
             return optimalDegree;
         }
 
-        // Hàm dự đoán độ ẩm tiếp theo bằng hồi quy đa thức
-        function predictNextValues(data, numPredictions, degree) {
-            const regressionResult = polynomialRegression(data, degree);
-            const { equation } = regressionResult;
-            const lastIndex = data.length;
+        function calculateRegressionCurve(data, degree) {
+            const { equation } = polynomialRegression(data, degree);
+            const regressionData = data.map((_, x) => {
+                let y = 0;
+                equation.forEach((coef, idx) => {
+                    y += coef * Math.pow(x, idx);
+                });
+                return Math.max(0, Math.min(100, parseFloat(y.toFixed(2))));
+            });
+            return regressionData;
+        }
 
+        function predictNextValues(data, numPredictions, degree) {
+            const result = polynomialRegression(data, degree);
+            const { equation } = result;
+            const lastIndex = data.length;
             const predictions = [];
 
             for (let i = 1; i <= numPredictions; i++) {
                 const x = lastIndex + i;
-                // Tính giá trị dự đoán bằng cách thay x vào phương trình đa thức
-                let predictedValue = 0;
-                equation.forEach((coef, index) => {
-                    predictedValue += coef * Math.pow(x, index);
+                let y = 0;
+                equation.forEach((coef, idx) => {
+                    y += coef * Math.pow(x, idx);
                 });
-                // Làm tròn và giới hạn trong khoảng 0-100%
-                predictedValue = Math.max(0, Math.min(100, parseFloat(predictedValue.toFixed(2))));
-                predictions.push(predictedValue);
+                // ràng buộc 0 - 100
+                y = Math.max(0, Math.min(100, parseFloat(y.toFixed(2))));
+                predictions.push(y);
             }
-
             return predictions;
         }
 
-        // Hàm tính giá trị hồi quy đa thức tại mỗi điểm dữ liệu hiện có
-        function calculateRegressionCurve(data, degree) {
-            const regressionResult = polynomialRegression(data, degree);
-            const { equation } = regressionResult;
+        // --------------------- Hàm hỗ trợ LSTM ---------------------
+        const WINDOW_SIZE = 5;     // Kích thước cửa sổ LSTM
+        const NUM_PREDICT = 5;     // Số bước dự đoán tương lai
 
-            const regressionData = data.map((_, x) => {
-                let y = 0;
-                equation.forEach((coef, index) => {
-                    y += coef * Math.pow(x, index);
-                });
-                // Làm tròn và giới hạn trong khoảng 0-100%
-                y = Math.max(0, Math.min(100, parseFloat(y.toFixed(2))));
-                return y;
-            });
-
-            return regressionData;
+        function normalizeData(dataArray) {
+            const minVal = Math.min(...dataArray);
+            const maxVal = Math.max(...dataArray);
+            const range = maxVal - minVal || 1;  // tránh chia 0
+            const normalized = dataArray.map(d => (d - minVal) / range);
+            return { normalized, minVal, maxVal };
         }
 
-        // Hàm chuẩn bị dữ liệu cho LSTM
         function prepareLSTMData(data, windowSize = WINDOW_SIZE) {
             const inputs = [];
             const labels = [];
-
             for (let i = 0; i < data.length - windowSize; i++) {
-                // Chuyển đổi mỗi giá trị độ ẩm thành một mảng con đơn lẻ
                 const input = data.slice(i, i + windowSize).map(value => [value]);
                 const label = data[i + windowSize];
                 inputs.push(input);
                 labels.push(label);
             }
-
             return { inputs, labels };
         }
 
-        // Hàm dự đoán với LSTM sử dụng TensorFlow.js
-        async function predictWithLSTM(data, numPredictions, windowSize = WINDOW_SIZE) {
-            if (data.length < windowSize) {
-                console.warn("Không đủ dữ liệu để huấn luyện LSTM.");
-                return Array(numPredictions).fill(null);
+        async function trainLSTMModel(data, windowSize = WINDOW_SIZE) {
+            const { normalized, minVal, maxVal } = normalizeData(data);
+            const { inputs, labels } = prepareLSTMData(normalized, windowSize);
+
+            if (inputs.length < 1) {
+                console.warn("Chưa đủ dữ liệu để train LSTM.");
+                return null;
             }
 
-            // Chuẩn bị dữ liệu
-            const { inputs, labels } = prepareLSTMData(data, windowSize);
-
-            // Chuyển đổi dữ liệu thành tensor 3D
             const xs = tf.tensor3d(inputs, [inputs.length, windowSize, 1]);
             const ys = tf.tensor2d(labels, [labels.length, 1]);
 
-            // Định nghĩa mô hình LSTM
             const model = tf.sequential();
             model.add(tf.layers.lstm({ units: 50, activation: 'tanh', inputShape: [windowSize, 1] }));
             model.add(tf.layers.dense({ units: 1 }));
 
-            // Biên dịch mô hình
             model.compile({
                 optimizer: tf.train.adam(),
                 loss: 'meanSquaredError'
             });
 
-            // Huấn luyện mô hình
-            await model.fit(xs, ys, {
-                epochs: 100,
-                shuffle: false,
-                verbose: 0
+            const earlyStop = tf.callbacks.earlyStopping({
+                monitor: 'loss',
+                patience: 10
             });
 
-            // Sử dụng dữ liệu cuối cùng để dự đoán
-            let lastWindow = data.slice(data.length - windowSize).map(value => [value]);
-            const predictions = [];
+            await model.fit(xs, ys, {
+                epochs: 10,
+                shuffle: false,
+                verbose: 0,
+                callbacks: [earlyStop]
+            });
 
-            for (let i = 0; i < numPredictions; i++) {
-                const input = tf.tensor3d([lastWindow], [1, windowSize, 1]);
-                const pred = model.predict(input);
-                const predValue = (await pred.data())[0];
-                const clampedPred = Math.max(0, Math.min(100, parseFloat(predValue.toFixed(2))));
-                predictions.push(clampedPred);
-                lastWindow = [...lastWindow.slice(1), [clampedPred]];
-            }
+            xs.dispose();
+            ys.dispose();
 
-            return predictions;
+            return { model, minVal, maxVal };
         }
 
-        // Hàm tính giá trị hồi quy LSTM tại mỗi điểm dữ liệu hiện có
-        async function calculateLSTMRegression(data, windowSize = WINDOW_SIZE) {
-            if (data.length < windowSize) {
-                console.warn("Không đủ dữ liệu để tính hồi quy LSTM.");
-                return Array(data.length).fill(null);
-            }
+        async function getLSTMRegressionCurve(modelData, data, windowSize = WINDOW_SIZE) {
+            if (!modelData || !modelData.model) return Array(data.length).fill(null);
+            const { model, minVal, maxVal } = modelData;
 
-            // Chuẩn bị dữ liệu
-            const { inputs, labels } = prepareLSTMData(data, windowSize);
-
-            // Chuyển đổi dữ liệu thành tensor 3D
-            const xs = tf.tensor3d(inputs, [inputs.length, windowSize, 1]);
-            const ys = tf.tensor2d(labels, [labels.length, 1]);
-
-            // Định nghĩa mô hình LSTM thực sự
-            const model = tf.sequential();
-            model.add(tf.layers.lstm({ units: 50, activation: 'tanh', inputShape: [windowSize, 1] }));
-            model.add(tf.layers.dense({ units: 1 }));
-
-            // Biên dịch mô hình
-            model.compile({
-                optimizer: tf.train.adam(),
-                loss: 'meanSquaredError'
-            });
-
-            // Huấn luyện mô hình
-            await model.fit(xs, ys, {
-                epochs: 100,
-                shuffle: false,
-                verbose: 0
-            });
-
-            // Dự đoán cho từng điểm dữ liệu hiện có để tạo đường hồi quy
-            const regressionCurve = [];
+            const { normalized } = normalizeData(data);
+            const curve = [];
 
             for (let i = 0; i < data.length; i++) {
                 if (i < windowSize) {
-                    regressionCurve.push(null); // Không đủ dữ liệu để dự đoán
-                    continue;
-                }
-                const window = data.slice(i - windowSize, i).map(value => [value]);
-                const input = tf.tensor3d([window], [1, windowSize, 1]);
-                const pred = model.predict(input);
-                const predValue = (await pred.data())[0];
-                const clampedPred = Math.max(0, Math.min(100, parseFloat(predValue.toFixed(2))));
-                regressionCurve.push(clampedPred);
-            }
+                    curve.push(null);
+                } else {
+                    const inputSlice = normalized.slice(i - windowSize, i).map(val => [val]);
+                    const inputTensor = tf.tensor3d([inputSlice], [1, windowSize, 1]);
+                    const pred = model.predict(inputTensor);
+                    const predValue = (await pred.data())[0];
 
-            return regressionCurve;
+                    const y = predValue * (maxVal - minVal) + minVal;
+                    curve.push(Math.max(0, Math.min(100, parseFloat(y.toFixed(2)))));
+                    inputTensor.dispose();
+                    pred.dispose();
+                }
+            }
+            return curve;
         }
 
-        // Hàm cập nhật dữ liệu của biểu đồ
-        async function updateChart(historyData) {
-            const labels = [];
-            const dataPoints = [];
+        async function predictNextLSTM(modelData, data, numPredictions, windowSize = WINDOW_SIZE) {
+            if (!modelData || !modelData.model) return [];
+            const { model, minVal, maxVal } = modelData;
 
-            // Sắp xếp dữ liệu theo timestamp nếu cần
+            const { normalized } = normalizeData(data);
+            let lastWindow = normalized.slice(-windowSize); 
+
+            const predictions = [];
+            for (let i = 0; i < numPredictions; i++) {
+                if (lastWindow.length < windowSize) {
+                    predictions.push(null);
+                    continue;
+                }
+                const inputTensor = tf.tensor3d([lastWindow.map(val => [val])], [1, windowSize, 1]);
+                const pred = model.predict(inputTensor);
+                const predValue = (await pred.data())[0];
+
+                const denormValue = predValue * (maxVal - minVal) + minVal;
+                const clampedValue = Math.max(0, Math.min(100, parseFloat(denormValue.toFixed(2))));
+
+                predictions.push(clampedValue);
+
+                // Cập nhật cửa sổ
+                lastWindow = [...lastWindow.slice(1), predValue]; 
+                inputTensor.dispose();
+                pred.dispose();
+            }
+            return predictions;
+        }
+
+        // --------------------- Cập nhật dữ liệu biểu đồ ---------------------
+        let globalDataArray = [];   // Toàn bộ dữ liệu humidity
+        let globalLabels = [];      // Toàn bộ timestamp
+        let globalModelInfo = null; // Lưu lại model LSTM sau khi train
+        let hasTrainedOnce = false; // Đảm bảo chỉ train 1 lần
+
+        // Bạn muốn vẽ 20 mẫu gần nhất
+        const LAST_POINTS_COUNT = 20;
+
+        async function updateChart(historyData) {
+            // 1) Gom tất cả dữ liệu (toàn bộ) để huấn luyện
             const sortedEntries = Object.entries(historyData).sort((a, b) => {
                 return new Date(a[1].timestamp) - new Date(b[1].timestamp);
             });
 
-            sortedEntries.forEach(([key, entry], index) => {
-                labels.push(entry.timestamp); // Thời gian
-                dataPoints.push(entry.humidity); // Độ ẩm
+            // Tạo mảng labels và dataPoints cho toàn bộ
+            globalLabels = [];
+            globalDataArray = [];
+            sortedEntries.forEach(([key, entry]) => {
+                globalLabels.push(entry.timestamp);
+                globalDataArray.push(entry.humidity);
             });
 
-            // Cập nhật dữ liệu thực tế
-            chart.data.labels = labels;
-            chart.data.datasets[0].data = dataPoints;
-
-            // Tìm độ bậc tối ưu cho hồi quy đa thức
-            const degree = findOptimalDegree(dataPoints, 1, 15);
-            // console.log(`Độ bậc tối ưu cho hồi quy đa thức: ${degree}`);
-
-            // Tính toán hồi quy đa thức và đường hồi quy
-            const regressionCurve = calculateRegressionCurve(dataPoints, degree);
-            chart.data.datasets[2].data = regressionCurve;
-
-            // Tính toán dự đoán sử dụng hồi quy đa thức bậc tối ưu
-            const numPredictions = 5;
-            const predictionsPoly = predictNextValues(dataPoints, numPredictions, degree);
-            const lastTimestamp = new Date(sortedEntries[sortedEntries.length - 1][1].timestamp);
-
-            // Giả định rằng các điểm tiếp theo cách đều nhau theo khoảng thời gian giữa các điểm hiện tại
-            const timeIncrement = 60000; // Ví dụ: mỗi điểm cách nhau 1 phút (60000 ms)
-            const predictedLabels = [];
-
-            for (let i = 1; i <= numPredictions; i++) {
-                const predictedTime = new Date(lastTimestamp.getTime() + i * timeIncrement);
-                // Định dạng thời gian theo mong muốn, ví dụ: 'HH:MM'
-                const formattedTime = `${predictedTime.getHours().toString().padStart(2, '0')}:${predictedTime.getMinutes().toString().padStart(2, '0')}`;
-                predictedLabels.push(formattedTime);
+            // 2) Train LSTM (chỉ 1 lần duy nhất, không train lại)
+            if (!hasTrainedOnce && globalDataArray.length >= 30) {
+                globalModelInfo = await trainLSTMModel(globalDataArray, WINDOW_SIZE);
+                hasTrainedOnce = true;
             }
 
-            // Cập nhật dữ liệu dự đoán đa thức
-            const extendedLabels = labels.concat(predictedLabels);
+            // 3) Chỉ lấy 20 mẫu gần nhất để hiển thị + dự đoán 5 bước
+            const lastData = globalDataArray.slice(-LAST_POINTS_COUNT);
+            const lastLabels = globalLabels.slice(-LAST_POINTS_COUNT);
+
+            // Hồi quy đa thức trên 20 điểm cuối
+            const degree = findOptimalDegree(lastData, 1, 5);
+            const polyCurveLast20 = calculateRegressionCurve(lastData, degree);
+            const polyPredictFuture = predictNextValues(lastData, NUM_PREDICT, degree);
+
+            // Hồi quy LSTM (fit) cho 20 điểm cuối (dùng model huấn luyện trên toàn bộ)
+            let lstmCurveLast20 = [];
+            if (globalModelInfo) {
+                // Ta có thể chạy getLSTMRegressionCurve(...) nhưng để tiết kiệm thời gian,
+                // ta chỉ cần chạy cho 20 mẫu cuối. Tuy nhiên, ví dụ minh hoạ thì chạy full 
+                // rồi .slice(-20) để nhất quán.
+                const fullLstmCurve = await getLSTMRegressionCurve(globalModelInfo, globalDataArray, WINDOW_SIZE);
+                // Lấy 20 điểm cuối của đường fit LSTM
+                lstmCurveLast20 = fullLstmCurve.slice(-LAST_POINTS_COUNT);
+            } else {
+                // Chưa train LSTM hoặc không đủ dữ liệu
+                lstmCurveLast20 = Array(LAST_POINTS_COUNT).fill(null);
+            }
+
+            // Dự đoán LSTM 5 điểm tương lai (tính từ 20 điểm cuối)
+            let lstmPredictFuture = [];
+            if (globalModelInfo) {
+                // Ở đây ta *tạm thời* chỉ đưa 20 điểm cuối vào để predict. 
+                // Mô hình thực ra train trên toàn bộ, 
+                // nhưng ta cắt ra 20 điểm cuối để "bắt nhịp" tương tự như multi-step.
+                lstmPredictFuture = await predictNextLSTM(globalModelInfo, lastData, NUM_PREDICT, WINDOW_SIZE);
+            } else {
+                lstmPredictFuture = Array(NUM_PREDICT).fill(null);
+            }
+
+            // 4) Chuẩn bị labels cho 5 điểm tương lai
+            const lastTimestamp = new Date(lastLabels[lastLabels.length - 1]);
+            const timeIncrement = 60000; // 1 phút
+            const futureLabels = [];
+            for (let i = 1; i <= NUM_PREDICT; i++) {
+                const futureTime = new Date(lastTimestamp.getTime() + i * timeIncrement);
+                const hh = futureTime.getHours().toString().padStart(2, '0');
+                const mm = futureTime.getMinutes().toString().padStart(2, '0');
+                futureLabels.push(`${hh}:${mm}`);
+            }
+
+            // 5) Cập nhật dữ liệu cho chart:
+            //    - Dữ liệu thực tế (20 điểm) + NaN cho 5 điểm tương lai
+            //    - Hồi quy đa thức fit (20 điểm) + 5 điểm tương lai
+            //    - Hồi quy LSTM fit (20 điểm) + 5 điểm tương lai
+            const extendedLabels = [...lastLabels, ...futureLabels];
             chart.data.labels = extendedLabels;
 
-            // Tạo một mảng chứa NaN cho các điểm dữ liệu thực tế và thêm các dự đoán vào cuối
-            const actualDataWithNaN = [...dataPoints, ...Array(numPredictions).fill(null)];
-            chart.data.datasets[0].data = actualDataWithNaN;
+            // Thực tế
+            chart.data.datasets[0].data = [
+                ...lastData,
+                ...Array(NUM_PREDICT).fill(null)
+            ];
 
-            // Cập nhật đường hồi quy đa thức với dữ liệu thực tế
-            chart.data.datasets[2].data = regressionCurve;
+            // Đa thức (fit)
+            chart.data.datasets[1].data = [
+                ...polyCurveLast20,
+                ...Array(NUM_PREDICT).fill(null)
+            ];
 
-            // Tạo một mảng chứa các dự đoán đa thức với các giá trị NaN cho dữ liệu không có
-            const predictedDataWithNaN = Array(dataPoints.length).fill(null).concat(predictionsPoly);
-            chart.data.datasets[1].data = predictedDataWithNaN;
+            // Đa thức (dự đoán)
+            chart.data.datasets[2].data = [
+                ...Array(LAST_POINTS_COUNT).fill(null),
+                ...polyPredictFuture
+            ];
 
-            // Tính toán và cập nhật đường hồi quy LSTM
-            const regressionCurveLSTM = await calculateLSTMRegression(dataPoints);
-            chart.data.datasets[4].data = regressionCurveLSTM;
+            // LSTM (fit)
+            chart.data.datasets[3].data = [
+                ...lstmCurveLast20,
+                ...Array(NUM_PREDICT).fill(null)
+            ];
 
-            // Dự đoán tương lai bằng LSTM
-            const predictionsLSTM = await predictWithLSTM(dataPoints, numPredictions);
-            // console.log(`Dự đoán LSTM: ${predictionsLSTM}`);
+            // LSTM (dự đoán)
+            chart.data.datasets[4].data = [
+                ...Array(LAST_POINTS_COUNT).fill(null),
+                ...lstmPredictFuture
+            ];
 
-            // Cập nhật dữ liệu dự đoán LSTM
-            chart.data.datasets[3].data = Array(dataPoints.length).fill(null).concat(predictionsLSTM);
-
-            chart.update(); // Cập nhật biểu đồ mà không phá hủy
+            chart.update();
         }
 
-        // Lắng nghe thay đổi dữ liệu Firebase theo thời gian thực
-        const recentQuery = query(historyRef, limitToLast(20)); // Tăng số lượng dữ liệu nếu cần
+        // --------------------- Lắng nghe Firebase (Realtime) ---------------------
+        // Nếu muốn lấy toàn bộ dữ liệu, có thể bỏ limitToLast hoặc đặt giá trị rất lớn
+        // VD: const recentQuery = query(historyRef); // bỏ limitToLast
+        // Hoặc: const recentQuery = query(historyRef, limitToLast(1000));
+        const recentQuery = query(historyRef, limitToLast(200));  // bạn chỉnh tuỳ ý
+
         onValue(recentQuery, (snapshot) => {
             if (snapshot.exists()) {
                 const historyData = snapshot.val();
@@ -609,17 +606,12 @@
             console.error("Lỗi khi lấy dữ liệu history:", error);
         });
 
-        // Khởi tạo biểu đồ
+        // Khởi tạo biểu đồ lần đầu
         initializeRealtimeChart();
-
-        // Hàm cập nhật nhãn cho thanh trượt độ ẩm
-        function updateMoistureLabel(value) {
-            document.getElementById('moisture-value').innerText = value;
-        }
-
     </script>
+
+    <!-- jquery + bootstrap -->
     <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"></script>
     <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js"></script>
 </body>
-
 </html>
