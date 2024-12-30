@@ -18,17 +18,17 @@ FirebaseConfig config;
 
 unsigned long sendDataPrevMillis = 0;
 unsigned long pumpStartMillis = 0;
+int lastHumidity = -1; // Lưu độ ẩm trước đó để so sánh
 bool signupOK = false;
 int humidity, value;
 bool isPumpOn = false;
-const int humidityThresholdLow = 30;  // Ngưỡng độ ẩm thấp để bật máy bơm
-const int humidityThresholdHigh = 75; // Ngưỡng độ ẩm cao để tắt máy bơm
-const unsigned long pumpTimeout = 15000; // Thời gian tối đa chạy máy bơm nếu độ ẩm không tăng (15 giây)
-const unsigned long historyInterval = 15000; // Chu kỳ gửi lịch sử khi máy bơm bật (15 giây)
+const int humidityThreshold = 30;  // Ngưỡng độ ẩm để bật/tắt máy bơm
+const unsigned long pumpTimeout = 30000; // Thời gian tối đa chạy máy bơm nếu độ ẩm không tăng (30 giây)
+const unsigned long historyInterval = 5000; // Chu kỳ gửi lịch sử khi máy bơm bật (5 giây)
 unsigned long lastHistoryMillis = 0;
 
 // NTP Server và múi giờ
-const char* ntpServer = "pool.ntp.org";
+const char* ntpServer = "time.google.com";
 const long gmtOffset_sec = 7 * 3600; // GMT+7
 const int daylightOffset_sec = 0;
 
@@ -59,7 +59,7 @@ void setup() {
   Serial.begin(115200);
   pinMode(relay_pin, OUTPUT);
   digitalWrite(relay_pin, LOW); // Tắt máy bơm ban đầu
-  
+
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   Serial.print("Connecting to Wi-Fi");
   while (WiFi.status() != WL_CONNECTED) {
@@ -73,6 +73,14 @@ void setup() {
 
   // Cấu hình NTP
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+  struct tm timeinfo;
+  Serial.print("Synchronizing time...");
+  while (!getLocalTime(&timeinfo)) {
+    Serial.print(".");
+    delay(1000);
+  }
+  Serial.println("Time synchronized:");
+  Serial.println(&timeinfo, "%Y-%m-%d %H:%M:%S");
 
   // Firebase cấu hình
   config.api_key = API_KEY;
@@ -88,13 +96,23 @@ void setup() {
   config.token_status_callback = tokenStatusCallback; // Xem addons/TokenHelper.h
   Firebase.begin(&config, &auth);
   Firebase.reconnectWiFi(true);
+
+  // Gửi ngưỡng lên Firebase
+  if (Firebase.RTDB.setInt(&fbdo, "Plant_Watering/Devices/dev01/humidityThreshold", humidityThreshold)) {
+    Serial.println("Humidity threshold uploaded successfully.");
+  } else {
+    Serial.println("Failed to upload humidity threshold:");
+    Serial.println("REASON: " + fbdo.errorReason());
+  }
 }
 
 void turnPumpOn() {
   digitalWrite(relay_pin, HIGH);
   isPumpOn = true;
   pumpStartMillis = millis();
+  lastHumidity = humidity; // Ghi nhận độ ẩm khi bật máy bơm
   Firebase.RTDB.setBool(&fbdo, "Plant_Watering/Devices/dev01/Status", true);
+  Firebase.RTDB.setString(&fbdo, "Plant_Watering/Devices/dev01/message", "Độ ẩm dưới " + String(humidityThreshold) + "%, máy bơm đang bật.");
   Serial.println("Pump turned ON");
 }
 
@@ -102,8 +120,17 @@ void turnPumpOff() {
   digitalWrite(relay_pin, LOW);
   isPumpOn = false;
   Firebase.RTDB.setBool(&fbdo, "Plant_Watering/Devices/dev01/Status", false);
+  Firebase.RTDB.setString(&fbdo, "Plant_Watering/Devices/dev01/message", "Độ ẩm đạt ngưỡng, máy bơm đã tắt.");
   Serial.println("Pump turned OFF");
 }
+
+// void handlePumpTimeout() {
+//   digitalWrite(relay_pin, LOW);
+//   isPumpOn = false;
+//   Firebase.RTDB.setBool(&fbdo, "Plant_Watering/Devices/dev01/Status", false);
+//   Firebase.RTDB.setString(&fbdo, "Plant_Watering/Devices/dev01/message", "Vui lòng kiểm tra bể nước và dây dẫn.");
+//   Serial.println("Pump turned OFF due to timeout. Please check water tank and connections.");
+// }
 
 void sendHistoryData() {
   String currentTime = getFormattedTime();
@@ -128,33 +155,26 @@ void loop() {
   humidity = (100 - ((value / 4095.00) * 100));
 
   if (isPumpOn) {
-    // Kiểm tra nếu vượt quá thời gian chạy mà độ ẩm không tăng
-    if (millis() - pumpStartMillis > pumpTimeout) {
-      turnPumpOff();
-      Serial.println("Pump turned off due to timeout.");
-      return;
-    }
-
-    // Gửi lịch sử theo chu kỳ 15 giây khi máy bơm đang bật
+    // Gửi lịch sử theo chu kỳ 10 giây khi máy bơm đang bật
     if (millis() - lastHistoryMillis > historyInterval) {
       lastHistoryMillis = millis();
       sendHistoryData();
     }
 
-    // Tắt máy bơm nếu độ ẩm đạt ngưỡng cao
-    if (humidity >= humidityThresholdHigh) {
+    // Tắt máy bơm nếu độ ẩm đạt ngưỡng
+    if (humidity >= humidityThreshold) {
       turnPumpOff();
     }
   } else {
-    // Kiểm tra nếu độ ẩm dưới ngưỡng thấp thì bật máy bơm
-    if (humidity <= humidityThresholdLow) {
+    // Kiểm tra nếu độ ẩm dưới ngưỡng thì bật máy bơm
+    if (humidity < humidityThreshold) {
       turnPumpOn();
       lastHistoryMillis = millis(); // Reset thời gian gửi lịch sử
     }
   }
 
-  // Gửi dữ liệu mặc định mỗi 30 giây nếu máy bơm tắt
-  if (!isPumpOn && Firebase.ready() && signupOK && (millis() - sendDataPrevMillis > 30000 || sendDataPrevMillis == 0)) {
+  // Gửi dữ liệu mặc định mỗi 5 giây nếu máy bơm tắt
+  if (!isPumpOn && Firebase.ready() && signupOK && (millis() - sendDataPrevMillis > 5000 || sendDataPrevMillis == 0)) {
     sendDataPrevMillis = millis();
     sendHistoryData();
   }
